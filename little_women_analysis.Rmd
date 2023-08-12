@@ -1,0 +1,247 @@
+---
+title: "Text Analysis of *Little Women*"
+author: "Nat Larsen"
+date: '2023-07-09'
+output: github_document
+---
+
+```{r load libraries}
+# Load libraries
+
+library(dplyr)
+library(gutenbergr)
+library(tidytext)
+library(ggplot2)
+library(textdata)
+library(knitr)
+library(tidyverse)
+library(stringr)
+library(wordcloud)
+library(reshape2)
+library(RColorBrewer)
+```
+
+# Select a corpus and Import it
+
+Using the gutenbergr package, which provides access to the public domain works from the Project Gutenberg collection, I will import the textual data from one of my favorite classical novels, "Little Women" written by Louisa May Alcott in 1868. 
+
+```{r import}
+# Import data
+little_women <- gutenberg_download(c(514)) # import Little Women from Gutenberg (id 514)
+```
+# Clean and Process Corpus
+
+After importing the data, I will clean and tidy it to create a dataframe I can work in and create visualizations from. I am following the steps from [Text Mining with R, Chapter 1] (https://www.tidytextmining.com/tidytext.html)
+
+```{r process}
+# Process data
+
+clean_women <- little_women %>%
+  mutate(book = "Little Women") %>% # adds a new column called "book"
+  group_by(book) %>%
+  mutate(
+    chapter = cumsum(str_detect(text, regex("^chapter [\\divxlcIVXLCDM]+", ignore_case = TRUE))), # adds chapter and linenumber columns
+    linenumber = row_number()
+  ) %>%
+  ungroup() %>%
+  select(text, book, chapter, linenumber) # selects and keeps only the "text", "book", "chapter", and "linenumber" columns in the data frame
+
+tidy_women <- clean_women %>%
+  unnest_tokens(word, text) %>% # tokenize the text format as one-word-per-row 
+  anti_join(stop_words) # remove stop words (common words kept in tidyverse stop_words data set)
+                                   
+```
+
+# Exploratory Analysis
+
+After processing my data, I want to first explore the data to find the most frequent words in the text. Since in cleaning my data frame, one of the steps I took was to remove stop words (ie commonly used words), I want to explore how the data would look differently if I included vs. excluded stop words from plotting the most frequent words. I will follow the steps outlined in [Text Mining with R, Chapter 1] (https://www.tidytextmining.com/tidytext.html)
+
+### Visualization 1: Plot of Most Frequent Words (With Stop Words)
+
+```{r word count}
+# Create dataframe including stop words
+stop_women <- clean_women %>%
+    unnest_tokens(word, text) # tokenize the text format as one-word-per-row 
+  # don't use the anti_join(stop_words) so that stop words are included in graph. 
+
+# Plot dataframe including stop words
+stop_women %>%
+  count(word, sort = TRUE) %>%
+  filter(n > 650) %>% # for graph readability, limit most frequent to over 650 mentions
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word, fill = "Hot Pink")) +
+  geom_col() +
+  scale_fill_manual(values = "hotpink") +
+  labs(y = NULL, x = "Word Frequency") +
+  ggtitle("Most Frequent Words in Little Women (With Stop Words)")
+```
+
+### Interpretation: 
+
+The above plot shows the frequency of the most frequent words in *Little Women* INCLUDING stop words. The most frequent word is "and", followed by "the", "to", "a"-all stop words. The most frequent non-stop word is "jo", in the middle of the y-axis, with a frequency bar noticeably less than the stop words. From this visualization, it is clear the truly most frequent words in the text are the most frequent words in English language: the stop words common to all works of writing. Seeing this is important to contextualize the work of *Little Women* and note that like other pieces, the most frequent words are stop words. However, I understand now why we might want to exclude stop words from analyzing the most frequent words since they don't shed light into what makes the work unique and the words Alcott most uses vs. the words most English-speaking writers use. I'm interested to see how the next plot of the most frequent words excluding stop words compares. 
+
+### Visualization 2a: Plot of Most Frequent Words (Without Stop Words)
+
+```{r word frequency}
+tidy_women %>% # use data frame already created during processing that excludes stop words
+  count(word, sort = TRUE) %>%
+  filter(n > 150) %>% # for graph readability, limit most frequent to over 150 mentions
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word, fill = "Pastel Pink")) +
+  geom_col() +
+  scale_fill_manual(values = "#FFD1DC") +
+  labs(y = NULL, x = "Word Frequency") +
+  ggtitle("Most Frequent Words in Little Women (Without Stop Words)")
+```
+
+### Interpretation: 
+
+The above plot shows the frequency of the most frequent words in *Little Women* EXCLUDING stop words. In this plot, the most frequent words-"jo","meg","amy","laurie"- are all names of the characters (interestingly "beth" and "mother" appear significantly less than the others). "jo" appears significantly more than the others, suggesting that her character may have the most mentions. Although the novel's subtitle "Or, Meg, Jo, Beth, and Amy" suggests the sisters share centrality, this analysis shows that Jo might actually play a larger role in the novel than her sisters do. 
+
+In comparison to the plot INCLUDING stop words, this plot EXCLUDING stop words represents a different definition of "most frequent": whereas the most frequent word including stop words was "and" with over 8000 mentions, the most frequent word excluding stop words is "jo" with just over 1200 mentions (this is also represented in the ggplot code since to make the graph readable, I had to define 'most frequent' as over 600 mentions in the stop word graph vs. only 150 mentions in the non-stop word graph). Comparing these two graphs puts the words of the text in perspective-while "jo" seems to be used a lot, "and" was used much more than that). While the stop word graph helps contextualize the word frequencies and align Alcott to other English-speakers, the non-stop word graph may be more useful to really understand the most repeated ideas and people of the text and analyze Alcott's individual writing style independent of commonly-used words. 
+
+### Visualization 2b: Word Cloud of Most Frequent Words (Excluding Stop Words)
+
+```{r frequency word cloud}
+# Frequency Word Cloud
+tidy_women %>%
+  anti_join(stop_words) %>%
+  count(word) %>%
+  with(wordcloud(word, n, max.words = 100, colors = brewer.pal(8, "Set2"), family = "Georgia")) # format wordcloud colors and fonts - used package found on StackOverflow
+
+```
+
+### Interpretation: 
+
+To further practice visualization, I created this word cloud to represent the word frequency of *Little Women*- the biggest (gray and pink) words are the most frequent and smaller (green and orange) words are the least frequent. This is another way of representing the plot created prior-the same words ("jo") are most frequent in this wordcloud as in the plot. The recognition by color and size differs from the plot and may be a more visually-pleasing way of analyzing text. 
+
+# Sentiment Analysis
+
+After exploring the word frequencies, I want to learn more about the significance of the words used to the story. Through conducting sentiment analysis (following the steps of [Text Mining with R, Chapter 2] (https://www.tidytextmining.com/sentiment.html)), I hope to glean more about the words and emotions throughout the narrative. 
+
+### 1. Most Common Sentiments in Little Women
+
+```{r most common sentiments}
+# Most Common Sentiments in Little Women
+# Get the NRC sentiment lexicon
+nrc_lexicon <- get_sentiments("nrc") # chose the nrc lexicon because of its specific emotions
+
+# Perform sentiment analysis
+common_sentiments <- tidy_women %>%
+  group_by(word) %>%
+  summarise() %>%
+  inner_join(nrc_lexicon) %>%
+  count(sentiment) %>%
+  filter(!sentiment %in% c("positive", "negative")) %>%  # exclude positive and negative sentiments and just focus on specific sentiments in my graph
+  arrange(desc(n))
+
+# Plot the most common sentiments
+ggplot(common_sentiments, aes(x = reorder(sentiment, -n), y = n, fill = sentiment)) +
+  geom_col() +
+  labs(x = "Sentiment", y = "Count") +
+  ggtitle("Most Common Sentiments in Little Women") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+### Interpretation: 
+
+The above plot shows the most frequent sentiments in *Little Women*: trust, fear, and sadness. Interestingly, the emotion I associate with the text, joy, is less frequent than the aforementioned, and almost equally frequent to anger. To further explore why trust is the leading emotion, I want to learn more about which words nrc flagged as "trust" in the text. 
+
+### 2. Most Common Trust-Sentiment Words
+
+```{r table most common "trust" words}
+# Most Common Trust-Sentiment Words
+# Use nrc sentiment data
+nrc_trust <- get_sentiments("nrc") %>% 
+  filter(sentiment == "trust") # filter by trust, target sentiment to analyze
+
+# Create data frame of trust sentiments and Little Women
+trusting_women <- tidy_women %>% 
+  inner_join(nrc_trust) %>%
+  count(word, sort = TRUE)
+
+# Generate a table of most common "trust" words in Little Women
+table_trust <- kable(trusting_women, caption = "Most Common Trust Words in Little Women",  width = "100%") 
+print(head(table_trust, 10)) # only display first 10 rows to limit excessive scrolling
+```
+
+### Interpretation: 
+
+This table shows the most common words embodying the "trust" sentiment identified as the most frequent in the text. The words "mother", "happy", and "father" all register as "trust"-which makes sense within the text, since it is so much about family. I understand more why trust is the most frequent sentiment since the narrative is family-focused. To further explore the text sentiments, I want to analyze the text's sentiments *across* the narrative. 
+
+### 3. Sentiments Throughout the Narrative
+
+```{r plot sentiment throughout narrative}
+# Sentiments Throughout the Narrative
+# Create a data frame 
+sentimental_women <- tidy_women %>%
+  group_by(word, book, chapter, linenumber) %>%
+  summarise(count = n()) %>%
+  inner_join(get_sentiments("bing")) %>% # using bing for negative/postitive labels
+  count(book, index = linenumber %/% 80, sentiment) %>% # index to keep track of narrative time in sections of text
+  pivot_wider(names_from = sentiment, values_from = n, values_fill = 0) %>% 
+  mutate(sentiment = positive - negative)
+
+# Plot the data frame
+ggplot(sentimental_women, aes(index, sentiment, fill = book)) +
+  geom_col(show.legend = FALSE) +
+  scale_fill_manual(values = "hotpink") +
+  labs(y = "Sentiment Sign", x = "Narrative Time of Text") +
+  ggtitle("Sentiment Throughout Narrative of Little Women")
+```
+
+### Interpretation: 
+
+The above graph shows the narrative time of the text and the sentiment sign across it-values below 0 are negative (sentiments and numbers) and values above 0 are positive (sentiments and numbers). Across the novel, there are several positive and negative spikes, suggesting that the narrative doesn't move in a single positive or negative sentiment direction, but alternates throughout. The most dramatic negative spike is towards the end of the novel, while the highest positive spike precedes it. This reveals how the emotions vary over the course of the novel. To further explore how the novel is positive or negative, I want to examine the words associated with each sentiment.  
+
+### 4a. Plot of Words with Positive and Negative Sentiments
+
+```{r}
+# Most Common Positive and Negative Words
+bing_word_counts <- tidy_women %>%
+  inner_join(get_sentiments("bing")) %>% # join with bing to label tidy_women words as negative or positive
+  count(word, sentiment, sort = TRUE) %>% # count words
+  ungroup()
+
+bing_word_counts %>%
+  group_by(sentiment) %>%
+  slice_max(n, n = 10) %>% 
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word, fill = sentiment)) + # plot
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~sentiment, scales = "free_y") +
+  labs(x = "Contribution to sentiment",
+       y = NULL)
+```
+
+### Interpretation: 
+
+This plot shows the most frequent negative and positive words of the text-the most frequent negative word is "poor" and the most frequent positive word is "love." From the prior graph, the places where the narrative is more negative correlate to greater uses of the negative words above (where poor is mentioned more often, for example) and the places where the narrative is more positive correlate to greater uses of the positive words above (where love is mentioned more often). One thing to note is that "miss" is the 3rd most frequent negative word; however, in this text, "miss" might be a title for the young lady characters, rather than a negatively-connoted word for a feeling of abscence. I decided to leave the word in my plot, even though it may misrepresent its negative frequency, but it could be removed by making "miss" a custom stop word (see (Text Mining with R) [https://www.tidytextmining.com/sentiment.html]). 
+
+# 4b. Wordcloud of Positive and Negative Sentiments
+
+```{r sentiment word cloud}
+### Positive/Negative Word Cloud
+
+tidy_women %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  group_by(sentiment) %>%
+  top_n(30) %>%
+  ungroup() %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  comparison.cloud(colors = c("lightblue", "#ff6961"),
+                   max.words = 50,
+                   scale = c(3, 0.5),
+                   family = "Georgia",
+                   title.size = 1.5)
+```
+
+### Interpretation: 
+
+This word cloud also visually represents the sentiments of *Little Women*-all the blue words are negative and all the red words are positive. The bigger words have greater frequency while the smaller words have lesser frequency. While revealing similar trends to the sentiment analysis plots ("love" is most frequent postive word while "poor" is most frequent negative word), the wordcloud provides another way of aesthetically visualizing the text and its sentiments. 
+
+# Conclusion
+
+Through conducting a textual analysis of one of my favorite books, *Little Women*, I discovered new insights into the narrative, arc, and Alcott's style. I was surprised to find that "jo" appeared more than the other characters in my exploration, the arc maintains negative spikes throughout the narrative, and "trust" is the most frequent sentiment. While I previously considered the novel a joyful story about sisters, this analysis reveals the story is more complicated, suggesting a true emphasis on Jo rather than all her family and with frequent negative moments. Visualizing textual analysis through tables, plots, and word clouds helped identify these findings and trends.

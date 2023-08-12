@@ -1,4 +1,4 @@
-# R-Analysis-Little-Women
+# R Analysis of Little Women
 
 # Text Analysis of *Little Women*
 This repository includes code to perform a text analysis and sentiment analysis on Lousia May Alcott's novel, *Little Women* (1868). The purpose of this repository is to explore the words associated with the text through visualizing their frequencies and their sentiments and provide a deeper understanding of the narrative and Alcott's style. 
